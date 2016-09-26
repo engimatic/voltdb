@@ -1369,4 +1369,25 @@ public abstract class AbstractExpression implements JSONString, Cloneable {
         }
         return true;
     }
+
+    public boolean isColumnEquivalenceFilter() {
+        // Ignore expressions that are not of COMPARE_EQUAL type
+        ExpressionType type = getExpressionType();
+        if (type != ExpressionType.COMPARE_EQUAL) {
+            return false;
+        }
+        AbstractExpression leftExpr = getLeft();
+        // Can't use an expression that is based on a column value but is not just a simple column value.
+        if ( ( ! (leftExpr instanceof TupleValueExpression)) &&
+                leftExpr.hasAnySubexpressionOfClass(TupleValueExpression.class) ) {
+            return false;
+        }
+        AbstractExpression rightExpr = getRight();
+        if ( ( ! (rightExpr instanceof TupleValueExpression)) &&
+                rightExpr.hasAnySubexpressionOfClass(TupleValueExpression.class) ) {
+            return false;
+        }
+        return true;
+    }
+
 }
