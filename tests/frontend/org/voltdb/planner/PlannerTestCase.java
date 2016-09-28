@@ -175,14 +175,21 @@ public class PlannerTestCase extends TestCase {
     private List<AbstractPlanNode> compileWithJoinOrderToFragments(String sql, int paramCount,
                                                                    boolean planForSinglePartition,
                                                                    String joinOrder) {
-        List<AbstractPlanNode> pn = m_aide.compile(sql, paramCount, m_byDefaultInferPartitioning, m_byDefaultPlanForSinglePartition, joinOrder);
-        assertTrue(pn != null);
-        assertFalse(pn.isEmpty());
-        assertTrue(pn.get(0) != null);
-        if (planForSinglePartition) {
-            assertTrue(pn.size() == 1);
+        try {
+            //* enable to debug */ System.out.println("DEBUG: compileWithJoinOrderToFragments(\"" + sql + "\", " + planForSinglePartition + ", \"" + joinOrder + "\")");
+            List<AbstractPlanNode> pn = m_aide.compile(sql, paramCount, m_byDefaultInferPartitioning, m_byDefaultPlanForSinglePartition, joinOrder);
+            assertTrue(pn != null);
+            assertFalse(pn.isEmpty());
+            assertTrue(pn.get(0) != null);
+            if (planForSinglePartition) {
+                assertTrue(pn.size() == 1);
+            }
+            return pn;
         }
-        return pn;
+        catch (PlanningErrorException pe) {
+            fail("Query: '" + sql + "' threw " + pe);
+            return null; // dead code.
+        }
     }
 
     protected AbstractPlanNode compileSPWithJoinOrder(String sql, String joinOrder) {

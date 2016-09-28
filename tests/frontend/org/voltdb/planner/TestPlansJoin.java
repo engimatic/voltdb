@@ -25,6 +25,7 @@ package org.voltdb.planner;
 
 import java.util.List;
 
+import org.apache.commons.lang3.StringUtils;
 import org.voltdb.expressions.AbstractExpression;
 import org.voltdb.expressions.OperatorExpression;
 import org.voltdb.expressions.TupleValueExpression;
@@ -1358,8 +1359,8 @@ public class TestPlansJoin extends PlannerTestCase {
 
     }
 
-    public void testJoiOrders() {
-        AbstractPlanNode pn, pn1, pn2;
+    public void testJoinOrders() {
+        AbstractPlanNode pn;
         AbstractScanPlanNode sn;
         IndexScanPlanNode isn;
 
@@ -1419,6 +1420,76 @@ public class TestPlansJoin extends PlannerTestCase {
         sn = (AbstractScanPlanNode) pn.getChild(0);
         assertEquals("R3", sn.getTargetTableName());
 
+    }
+
+    public void testExplainHighlights() {
+        // These tests of critical aspects of join-related @Explain output were
+        // migrated from the regression suite where they really did not belong.
+        // They MAY be somewhat redundant with other less stringly tests in this
+        // suite, but they do have the advantage of covering some key aspects of
+        // explain string generation in an informal easily-maintained way that
+        // does not get bogged down in the precise explain string syntax.
+        String[] JOIN_OPS = {"="};//TODO SOON:{"=", "IS NOT DISTINCT FROM"};
+
+        String explained;
+        for (String joinOp : JOIN_OPS) {
+            explained = buildExplainPlan(compileToFragments("select P1.A, P1.C, P3.A, P3.F " +
+                    "FROM P1 FULL JOIN P3 ON P1.A " +
+                    joinOp + " P3.A AND P1.A = 1 AND P3.F = 1" +
+                    " ORDER BY P1.A, P1.C, P3.A, P3.F"));
+            //* enable to debug */ System.out.println("DEBUG: " + explained);
+            assertTrue(explained.contains("NEST LOOP FULL JOIN"));
+            explained = buildExplainPlan(compileToFragments("select R1.A, R1.C, R3.A, R3.C " +
+                    "FROM R1 FULL JOIN R3 ON R3.A " +
+                    joinOp + " R1.A AND R3.A > 2 " +
+                    "ORDER BY R1.A, R1.D, R3.A, R3.C"));
+            assertTrue(explained.contains("NESTLOOP INDEX FULL JOIN"));
+            explained = buildExplainPlan(compileToFragments("select L.A, L.C, R.A, R.C " +
+                    "FROM R3 L FULL JOIN R3 R ON L.A " +
+                    joinOp + " R.A AND L.A > 3 " +
+                    "ORDER BY L.A, L.C, R.A, R.C"));
+            assertTrue(explained.contains("NESTLOOP INDEX FULL JOIN"));
+            explained = buildExplainPlan(compileToFragments("select * " +
+                    "FROM R1 FULL JOIN R2 ON R1.A " +
+                    joinOp + " R2.A RIGHT JOIN P2 ON P2.A " + joinOp + " R1.A " +
+                    "ORDER BY P2.A"));
+            assertTrue(!explained.contains("FULL"));
+            assertEquals(2, StringUtils.countMatches(explained, "LEFT"));
+            explained = buildExplainPlan(compileToFragments("select * " +
+                    "FROM R1 FULL JOIN R2 ON R1.A " +
+                    joinOp + " R2.A LEFT JOIN P2 ON P2.A " + joinOp + " R2.A " +
+                    "ORDER BY P2.A"));
+            assertTrue(explained.contains("FULL"));
+            explained = buildExplainPlan(compileToFragments("select * " +
+                    "FROM R1 RIGHT JOIN R2 ON R1.A " +
+                    joinOp + " R2.A FULL JOIN P2 ON R1.A " + joinOp + " P2.A " +
+                    "ORDER BY P2.A"));
+            assertTrue(explained.contains("LEFT"));
+            explained = buildExplainPlan(compileToFragments("select * " +
+                    "FROM R1 FULL JOIN R2 ON R1.A " +
+                    joinOp + " R2.A FULL JOIN P2 ON R1.A " + joinOp + " P2.A " +
+                    "ORDER BY P2.A"));
+            assertEquals(2, StringUtils.countMatches(explained, "FULL"));
+            explained = buildExplainPlan(compileToFragments("SELECT MAX(R1.C), A " +
+                    "FROM R1 FULL JOIN R2 USING (A) " +
+                    "WHERE A > 0 GROUP BY A ORDER BY A"));
+            assertEquals(1, StringUtils.countMatches(explained, "FULL"));
+            explained = buildExplainPlan(compileToFragments("SELECT A " +
+                    "FROM R1 FULL JOIN R2 USING (A) FULL JOIN R3 USING(A) " +
+                    "WHERE A > 0 ORDER BY A"));
+            assertEquals(2, StringUtils.countMatches(explained, "FULL"));
+            explained = buildExplainPlan(compileToFragments("SELECT L.A " +
+                    "FROM R3 L FULL JOIN R3 R ON L.C " +
+                    joinOp + " R.C ORDER BY A"));
+            assertEquals(1, StringUtils.countMatches(explained, "FULL"));
+            assertEquals(1, StringUtils.countMatches(explained, "SORT"));
+            explained = buildExplainPlan(compileToFragments("SELECT L.A, SUM(L.C) " +
+                    "FROM R3 L FULL JOIN R3 R ON L.C " +
+                    joinOp + " R.C GROUP BY L.A ORDER BY 1"));
+            assertEquals(1, StringUtils.countMatches(explained, "FULL"));
+            assertEquals(1, StringUtils.countMatches(explained, "SORT"));
+            assertEquals(1, StringUtils.countMatches(explained, "Serial AGGREGATION"));
+        }
     }
 
     @Override
